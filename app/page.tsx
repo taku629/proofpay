@@ -208,7 +208,10 @@ export default function Home() {
 
   async function settle(decision: "capture" | "void") {
     const action = decision === "capture" ? `capture ${money(amount)}` : "void this authorization";
-    if (!window.confirm(`Confirm that you want to ${action}? This is a Sandbox test action. The AI cannot perform it for you.`)) return;
+    const context = paymentMode === "simulation"
+      ? "This only updates the local simulation; no PayPal request or money transfer will happen."
+      : "This will send a test action to PayPal Sandbox. The AI cannot perform it for you.";
+    if (!window.confirm(`Confirm that you want to ${action}? ${context}`)) return;
     setDecisionBusy(true);
     setError("");
     try {
@@ -302,7 +305,7 @@ export default function Home() {
 
             <section className={`panel evidence-panel ${phase === "draft" ? "muted-panel" : ""}`}>
               <div className="panel-heading">
-                <div className="panel-title"><span className="panel-number">02</span><div><h3>Share the evidence</h3><p>Describe what was delivered. The AI will only see these notes.</p></div></div>
+                <div className="panel-title"><span className="panel-number">02</span><div><h3>Share the evidence</h3><p>The AI receives these notes and link as text. It never opens the link.</p></div></div>
                 {phase === "draft" && <span className="after-auth">AFTER AUTHORIZATION</span>}
               </div>
               <div className="evidence-fields">
