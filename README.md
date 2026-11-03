@@ -1,54 +1,84 @@
 # ProofPay
 
-**AI-assisted milestone acceptance with PayPal Sandbox payments.**
+**AI-assisted milestone acceptance with human-controlled PayPal Sandbox payments.**
 
-ProofPay explores a fairer way to handle freelance milestone work: agree on acceptance criteria before work begins, review submitted evidence against those criteria, and make a transparent, human-approved payment decision.
+ProofPay helps a client and freelancer agree on observable acceptance criteria, review submitted evidence one criterion at a time, and make a clear payment decision. AI can recommend; only the client can choose the final action.
 
-> **Prototype status:** This repository currently contains the project brief and MIT license. The application, AI evaluation, and PayPal Sandbox integration are planned—not implemented yet.
+> **Sandbox prototype:** This is a hackathon demo, not escrow and not a production payment service. PayPal Live is not supported. Without credentials, the app runs an explicitly labelled local simulation that does not call PayPal or move money. The offline review preview is not AI; configure an AI provider to run a real model review.
 
-## The problem
+## Walkthrough
 
-Freelancers and clients can disagree about whether a deliverable meets the agreed scope. Clients worry about paying for incomplete work; freelancers worry about delivering work and not getting paid. A vague “looks good” is not enough to make that decision fair.
+1. Set the milestone name, USD amount, and up to eight acceptance criteria.
+2. Approve a PayPal **Sandbox** order with `AUTHORIZE` intent, or use the clearly labelled local simulation.
+3. Enter a deliverable link and evidence notes. ProofPay does not open the link.
+4. Ask the configured AI model to map the submitted notes to each criterion, with evidence, rationale, and confidence. If no model is configured, the app labels its keyword-based local preview as **not AI**.
+5. Inspect the work and choose **Capture payment** or **Void authorization**. The AI cannot call either action by itself.
 
-## Proposed flow
+The milestone and review state stays in the current browser tab. The server keeps no database record; it issues a signed, 24-hour flow token that binds the order, amount, and later authorization ID to ProofPay's own payment actions.
 
-1. The client creates a milestone with a price and explicit, testable acceptance criteria.
-2. The client approves a PayPal Sandbox order with an authorization intent before work begins.
-3. The freelancer submits a deliverable link or file, with notes about the evidence for each criterion.
-4. An AI reviewer assesses each criterion and returns a recommendation with evidence, uncertainty, and a concise rationale.
-5. The client reviews the recommendation and chooses whether to capture, partially capture and void the remainder, or void the authorization. The AI does not move money by itself.
-6. PayPal webhooks record payment state changes. A later iteration may add eligible seller payouts through PayPal Payouts.
+## Run locally
 
-## Why AI and PayPal?
+Requires Node.js 20.9 or newer.
 
-AI makes a rubric-based review easier to understand by mapping each criterion to submitted evidence and calling out gaps instead of returning an unexplained score. PayPal Sandbox makes the consequences of a decision tangible: the prototype can demonstrate an authorization and the resulting capture or void without using real funds.
+```bash
+npm ci
+cp .env.example .env.local
+npm run dev
+```
 
-## Important boundaries
+Open [http://localhost:3000](http://localhost:3000). With no credentials, you can complete the local simulation from start to finish. It does not contact PayPal or an AI model.
 
-- A PayPal authorization is **not escrow**, a guarantee of payment, or a substitute for a contract or dispute-resolution process.
-- AI output is advisory. A person reviews the evidence and explicitly confirms any payment action.
-- The project is for a hackathon prototype and Sandbox testing, not production financial, legal, or payment advice.
-- Do not commit PayPal credentials, API keys, or private client deliverables to the repository.
+## Connect PayPal Sandbox
 
-## Planned technical direction
+Create a **Sandbox app** in the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/applications/sandbox). Put its Sandbox client ID in both `PAYPAL_CLIENT_ID` and `NEXT_PUBLIC_PAYPAL_CLIENT_ID`, and its Sandbox secret in `PAYPAL_CLIENT_SECRET`. The server is hard-wired to `https://api-m.sandbox.paypal.com`; there is no Live API endpoint in this prototype.
 
-- **Web app:** Next.js with an English-language interface
-- **Payments:** PayPal Orders v2 in Sandbox; evaluate Payouts for a later seller-payment step
-- **Payment events:** PayPal Webhooks
-- **AI review:** an LLM produces criterion-by-criterion recommendations grounded in submitted evidence
-- **Deployment target:** a free-tier web host for the demo
+```dotenv
+PAYPAL_CLIENT_ID=your-sandbox-client-id
+PAYPAL_CLIENT_SECRET=your-sandbox-secret
+NEXT_PUBLIC_PAYPAL_CLIENT_ID=your-sandbox-client-id
+# Optional: use a long, random server-side signing key instead of the Sandbox secret.
+PROOFPAY_SIGNING_SECRET=
+```
 
-The implementation may change as the prototype is validated. Any supported provider and setup steps will be documented here as they are added.
+The buyer approves with PayPal's JavaScript SDK. The server then calls Orders v2 to authorize, and Payments v2 to capture or void the authorization after a separate human action. Authorize, capture, and void requests use stable idempotency keys to make safe retries possible. Use test accounts and test funds only. PayPal authorizations are not escrow; PayPal says they are best captured within three days, with a maximum authorization period of 29 days in the documented Orders flow.
 
-## Development status
+Official references: [Orders v2](https://developer.paypal.com/api/orders/v2), [Create order](https://developer.paypal.com/api/orders/v2/orders-create), [Payments v2](https://developer.paypal.com/api/payments/v2), [Capture authorized payment](https://developer.paypal.com/api/payments/v2/authorizations-capture), [Void authorized payment](https://developer.paypal.com/api/payments/v2/authorizations-void).
 
-- [x] Public repository and MIT license
-- [ ] Milestone creation and acceptance criteria UI
-- [ ] PayPal Sandbox order authorization
-- [ ] Evidence submission and AI review with per-criterion rationale
-- [ ] Human-confirmed capture, partial capture, or void
-- [ ] Webhook event handling and status history
-- [ ] Deployed demo and short walkthrough video
+## Connect an AI provider
+
+Set server-only credentials for an already-owned, eligible free-tier OpenAI-compatible provider. For example, an AMD or Nebius key can be used if it exposes the OpenAI Chat Completions API. Provider base URL and model names vary, so use the exact values from the provider dashboard.
+
+```dotenv
+AI_BASE_URL=https://your-provider.example/v1
+AI_API_KEY=your-free-tier-key
+AI_MODEL=your-provider-model
+```
+
+Never expose `AI_API_KEY` in a `NEXT_PUBLIC_` variable or commit credentials. The reviewer receives only the criterion text, deliverable URL, and evidence notes. It does not fetch the URL; the prompt directs the model to treat user-provided text as untrusted evidence, not instructions, and to mark missing evidence as unclear. AI can still be wrong, so a person must inspect the work. Do not send sensitive client material to an external model without permission.
+
+If no complete AI configuration is present, the app uses a transparent local keyword-match preview. That preview is only for exercising the UI and must not be represented as AI evaluation.
+
+## Deploy on Render's free tier
+
+This repo includes a Render Blueprint at `render.yaml`. Create a free web service from the public GitHub repository, add the Sandbox and AI values as environment variables, and deploy. `NEXT_PUBLIC_PAYPAL_CLIENT_ID` must be present at build time and must match the server-side Sandbox client ID. Keep every PayPal credential Sandbox-only. The free instance may sleep while idle; a cold start can delay the demo.
+
+## Safety boundaries and current scope
+
+- The PayPal API base is Sandbox-only. Do not substitute Live credentials.
+- Only orders created by ProofPay can be authorized; a signed short-lived token binds later Capture/Void calls to that specific Sandbox flow.
+- An authorization is **not escrow**, a guarantee of payment, or a dispute-resolution process.
+- The AI review is advisory. The client explicitly confirms any capture or void.
+- Partial capture, seller payouts, dispute arbitration, webhooks, authentication, persistence, and production use are out of scope for this first demo.
+- Evidence is currently submitted as text and an optional link; ProofPay does not download or verify files behind the link.
+- Do not use confidential or personal client data in this prototype.
+
+## Development checks
+
+```bash
+npm run typecheck
+npm run build
+npm audit
+```
 
 ## License
 
