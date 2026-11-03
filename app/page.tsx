@@ -6,8 +6,6 @@ type Config = {
   paypalReady: boolean;
   paypalMisconfigured: boolean;
   paypalClientId: string | null;
-  aiReady: boolean;
-  aiModel: string | null;
 };
 type Criterion = { id: string; text: string };
 type ReviewResult = {
@@ -15,13 +13,12 @@ type ReviewResult = {
   status: "met" | "partial" | "not_met" | "unclear";
   evidence: string;
   rationale: string;
-  confidence: number;
+  matchRatio: number;
 };
 type Review = {
   summary: string;
   results: ReviewResult[];
-  mode: "ai" | "offline_preview";
-  model: string | null;
+  mode: "demo_fixture";
   caution: string;
 };
 type PayPalButtonsOptions = {
@@ -196,7 +193,7 @@ export default function Home() {
     setBusy(true);
     setError("");
     try {
-      const result = await postJson<Review>("/api/ai/review", { title, criteria, deliverableUrl, notes: evidenceNotes });
+      const result = await postJson<Review>("/api/demo/review", { criteria, notes: evidenceNotes });
       setReview(result);
       setPhase("reviewed");
     } catch (issue) {
@@ -210,7 +207,7 @@ export default function Home() {
     const action = decision === "capture" ? `capture ${money(amount)}` : "void this authorization";
     const context = paymentMode === "simulation"
       ? "This only updates the local simulation; no PayPal request or money transfer will happen."
-      : "This will send a test action to PayPal Sandbox. The AI cannot perform it for you.";
+      : "This will send a test action to PayPal Sandbox. You must confirm it yourself.";
     if (!window.confirm(`Confirm that you want to ${action}? ${context}`)) return;
     setDecisionBusy(true);
     setError("");
@@ -248,7 +245,7 @@ export default function Home() {
         <a className="brand" href="#top" aria-label="ProofPay home"><Mark /><span>proof<span className="brand-light">pay</span></span></a>
         <div className="topbar-right">
           <span className="topbar-note">A little more clarity. A lot more trust.</span>
-          <span className="sandbox-pill"><span className="live-dot" /> SANDBOX ONLY</span>
+          <span className="sandbox-pill"><span className="live-dot" /> NO LIVE PAYMENTS</span>
         </div>
       </header>
 
@@ -257,7 +254,7 @@ export default function Home() {
           <div className="eyebrow"><span className="eyebrow-line" /> MILESTONE PAYMENTS, MADE CLEARER</div>
           <h1>Proof, before<br /><em>payment.</em></h1>
           <p>Agree on what “done” means. Review the evidence together. You stay in control of the final payment.</p>
-          <div className="hero-proof"><span className="proof-check">✓</span> AI recommends. A person decides.</div>
+          <div className="hero-proof"><span className="proof-check">✓</span> Demo only. A person decides.</div>
         </div>
         <div className="hero-art" aria-hidden="true">
           <div className="orbit orbit-one" /><div className="orbit orbit-two" />
@@ -273,7 +270,7 @@ export default function Home() {
 
       <section className="workspace" aria-label="ProofPay demo workspace">
         <div className="workspace-heading">
-          <div><span className="section-kicker">LIVE WALKTHROUGH</span><h2>Your milestone, step by step</h2></div>
+          <div><span className="section-kicker">LOCAL WALKTHROUGH</span><h2>Your milestone, step by step</h2></div>
           <span className={`connection-pill ${config?.paypalReady ? "is-connected" : ""}`}><span className="connection-dot" />{config?.paypalReady ? "PayPal Sandbox connected" : "Interactive demo"}</span>
         </div>
 
@@ -305,21 +302,21 @@ export default function Home() {
 
             <section className={`panel evidence-panel ${phase === "draft" ? "muted-panel" : ""}`}>
               <div className="panel-heading">
-                <div className="panel-title"><span className="panel-number">02</span><div><h3>Share the evidence</h3><p>The AI receives these notes and link as text. It never opens the link.</p></div></div>
+                <div className="panel-title"><span className="panel-number">02</span><div><h3>Share the evidence</h3><p>The local demo checks keyword overlap in your notes only. It never opens the link.</p></div></div>
                 {phase === "draft" && <span className="after-auth">AFTER AUTHORIZATION</span>}
               </div>
               <div className="evidence-fields">
-                <label className="field"><span>Deliverable link <small>Optional · link is not opened by ProofPay</small></span><input type="url" value={deliverableUrl} onChange={(event) => setDeliverableUrl(event.target.value)} disabled={phase === "draft" || phase === "settled"} placeholder="https://github.com/..." /></label>
+                <label className="field"><span>Deliverable link <small>Optional · not sent to the demo check</small></span><input type="url" value={deliverableUrl} onChange={(event) => setDeliverableUrl(event.target.value)} disabled={phase === "draft" || phase === "settled"} placeholder="https://github.com/..." /></label>
                 <label className="field"><span>Evidence notes <small>What should the reviewer look for?</small></span><textarea rows={4} value={evidenceNotes} onChange={(event) => setEvidenceNotes(event.target.value)} disabled={phase === "draft" || phase === "settled"} /></label>
               </div>
               {phase === "draft" && <div className="locked-hint"><span className="lock-icon">⌑</span> Authorize the milestone first. Your agreed terms stay fixed during review.</div>}
-              {phase === "authorized" && <div className="review-cta-row"><div className="review-ready"><span className="ready-check">✓</span><span><b>Authorization recorded</b><small>{paymentMode === "simulation" ? "Local simulation · no PayPal funds involved" : "PayPal Sandbox authorization"}</small></span></div><button className="button button-ink" onClick={runReview} disabled={busy || invalidCriteria}>{busy ? <><span className="spinner" /> Reviewing…</> : <>Review evidence <span>→</span></>}</button></div>}
+              {phase === "authorized" && <div className="review-cta-row"><div className="review-ready"><span className="ready-check">✓</span><span><b>Demo state recorded</b><small>{paymentMode === "simulation" ? "Local simulation · no PayPal funds involved" : "PayPal Sandbox test authorization"}</small></span></div><button className="button button-ink" onClick={runReview} disabled={busy || invalidCriteria}>{busy ? <><span className="spinner" /> Checking…</> : <>Run demo check <span>→</span></>}</button></div>}
             </section>
 
             {review && <section className="panel review-panel">
               <div className="panel-heading review-heading">
-                <div className="panel-title"><span className="panel-number">03</span><div><h3>Criterion-by-criterion review</h3><p>{review.mode === "ai" ? "AI recommendation, grounded in the notes provided." : "Offline preview only — this is not an AI assessment."}</p></div></div>
-                <span className={`ai-badge ${review.mode === "ai" ? "real-ai" : "offline-ai"}`}><span>{review.mode === "ai" ? "✳" : "◌"}</span>{review.mode === "ai" ? `AI REVIEW · ${review.model}` : "OFFLINE PREVIEW"}</span>
+                <div className="panel-title"><span className="panel-number">03</span><div><h3>Local demo check</h3><p>Deterministic keyword overlap only — not AI and not verification.</p></div></div>
+                <span className="ai-badge offline-ai"><span>◌</span> LOCAL DEMO · NOT AI</span>
               </div>
               <p className="review-summary">{review.summary}</p>
               <div className="criteria-results">
@@ -329,7 +326,7 @@ export default function Home() {
                   return <article className="result-card" key={criterion.id}>
                     <div className="result-number">{String(index + 1).padStart(2, "0")}</div>
                     <div className="result-content"><div className="result-topline"><h4>{criterion.text}</h4><span className={`status-tag status-${result.status}`}>{result.status.replace("_", " ")}</span></div><p className="result-evidence"><span>Evidence</span> {result.evidence}</p><p className="result-rationale">{result.rationale}</p></div>
-                    <div className="confidence"><strong>{Math.round(result.confidence * 100)}%</strong><span>confidence</span></div>
+                    <div className="confidence"><strong>{Math.round(result.matchRatio * 100)}%</strong><span>keyword match</span></div>
                   </article>;
                 })}
               </div>
@@ -337,10 +334,10 @@ export default function Home() {
             </section>}
 
             {phase === "reviewed" && <section className="panel decision-panel">
-              <div className="decision-intro"><div><span className="section-kicker">YOUR CALL</span><h3>What happens next?</h3><p>Read the evidence, check the deliverable, then choose. ProofPay never moves money on the AI’s say-so.</p></div><div className="decision-amount"><span>AUTHORIZED</span><strong>{money(amount)}</strong></div></div>
+              <div className="decision-intro"><div><span className="section-kicker">YOUR CALL</span><h3>What happens next?</h3><p>Read the notes, inspect the deliverable, then choose. ProofPay never moves money automatically.</p></div><div className="decision-amount"><span>{paymentMode === "simulation" ? "DEMO AMOUNT" : "AUTHORIZED"}</span><strong>{money(amount)}</strong></div></div>
               <div className="decision-actions">
-                <button className="decision-button capture-button" onClick={() => settle("capture")} disabled={decisionBusy}><span className="decision-icon">✓</span><span><b>Capture payment</b><small>Release {money(amount)} to the freelancer</small></span><i>→</i></button>
-                <button className="decision-button void-button" onClick={() => settle("void")} disabled={decisionBusy}><span className="decision-icon">×</span><span><b>Void authorization</b><small>Cancel this pending Sandbox authorization</small></span><i>→</i></button>
+                <button className="decision-button capture-button" onClick={() => settle("capture")} disabled={decisionBusy}><span className="decision-icon">✓</span><span><b>{paymentMode === "simulation" ? "Mark demo captured" : "Capture Sandbox payment"}</b><small>{paymentMode === "simulation" ? "Local state only · no money moves" : `Sandbox test capture · ${money(amount)}`}</small></span><i>→</i></button>
+                <button className="decision-button void-button" onClick={() => settle("void")} disabled={decisionBusy}><span className="decision-icon">×</span><span><b>{paymentMode === "simulation" ? "Void demo authorization" : "Void Sandbox authorization"}</b><small>{paymentMode === "simulation" ? "Local state only · no payment exists" : "Cancel this pending Sandbox authorization"}</small></span><i>→</i></button>
               </div>
             </section>}
 
@@ -355,24 +352,24 @@ export default function Home() {
             <section className="payment-card">
               <div className="payment-card-top"><span className="section-kicker">PAYMENT STATUS</span><span className={`status-led ${phase === "settled" ? "led-done" : phase !== "draft" ? "led-wait" : ""}`} /></div>
               <h3>{phase === "draft" ? "Ready to authorize?" : phase === "authorized" ? "Authorization active" : phase === "reviewed" ? "Awaiting your decision" : paymentStatus === "CAPTURED" ? "Payment captured" : "Authorization voided"}</h3>
-              <p>{phase === "draft" ? "Approve the milestone in PayPal Sandbox before work starts." : phase === "authorized" ? "No funds have been captured. Review the submission before deciding." : phase === "reviewed" ? "AI has finished its advisory review. The choice is yours." : "The Sandbox has recorded your decision."}</p>
+              <p>{phase === "draft" ? (config?.paypalReady ? "Approve a PayPal Sandbox test order, or use the local simulation." : "Use the local simulation. No PayPal connection is currently configured.") : phase === "authorized" ? (paymentMode === "simulation" ? "Local demo state only; no funds are involved." : "No funds have been captured. Review the submission before deciding.") : phase === "reviewed" ? "The local demo check is complete. Inspect the work and choose." : paymentMode === "simulation" ? "The local simulation recorded your choice; no money moved." : "PayPal Sandbox returned a test result."}</p>
               <div className="payment-amount"><span>Milestone amount</span><strong>{money(amount)}</strong></div>
               {phase === "draft" && <div className="payment-action">
                 {config?.paypalReady ? <><div ref={paypalContainer} className="paypal-button-container" />{!sdkLoaded && <div className="paypal-loading"><span className="spinner" /> Loading PayPal Sandbox…</div>}{sdkError && <p className="payment-note error-note">PayPal SDK did not load. Check your Sandbox client ID and network.</p>}</> : config?.paypalMisconfigured ? <div className="setup-alert"><b>PayPal setup incomplete</b><span>Set matching Sandbox client IDs and a Sandbox secret in your environment.</span></div> : <><button className="button button-paypal" onClick={startSimulation} disabled={busy || !config || hasInvalidAmount || !title.trim()}>{busy ? <><span className="spinner" /> Starting…</> : <>Start local demo <span>→</span></>}</button><p className="payment-note">This simulates authorization locally. It does not connect to PayPal or move money.</p></>}
                 {(!config?.paypalReady && !config?.paypalMisconfigured) && <div className="payment-divider"><span>or connect Sandbox keys</span></div>}
               </div>}
               {phase !== "draft" && <div className={`authorization-badge ${phase === "settled" ? "is-settled" : ""}`}><span>{phase === "settled" ? "✓" : "◷"}</span><div><b>{paymentStatus}</b><small>{paymentMode === "simulation" ? "Local demo · no real payment" : "PayPal Sandbox · test transaction"}</small></div></div>}
-              <div className="payment-safety"><span className="safety-icon">⌑</span><p><b>Not escrow.</b> A PayPal authorization is not escrow or a guarantee of payment. This prototype is Sandbox-only.</p></div>
+              <div className="payment-safety"><span className="safety-icon">⌑</span><p><b>No live payments.</b> The verified walkthrough is a local simulation. A PayPal authorization is not escrow or a guarantee of payment.</p></div>
             </section>
 
             <section className="principles-card"><span className="section-kicker">BUILT ON THREE PROMISES</span><div className="principle"><span>01</span><div><b>Agree first</b><p>Set clear, testable criteria upfront.</p></div></div><div className="principle"><span>02</span><div><b>Show your work</b><p>Every recommendation points to evidence.</p></div></div><div className="principle"><span>03</span><div><b>Human in control</b><p>Only the client can confirm a payment action.</p></div></div></section>
 
-            <section className="setup-card"><div className="setup-card-heading"><span className="section-kicker">DEMO CONNECTIONS</span><span className="setup-status">{config ? "STATUS" : "CHECKING"}</span></div><div className="connection-row"><span className="connection-icon paypal-icon">P</span><span><b>PayPal Sandbox</b><small>{config?.paypalReady ? "Connected · test environment" : config?.paypalMisconfigured ? "Configuration incomplete" : "Local simulation mode"}</small></span><i className={config?.paypalReady ? "connected" : ""}>{config?.paypalReady ? "✓" : "–"}</i></div><div className="connection-row"><span className="connection-icon ai-icon">✳</span><span><b>AI evidence review</b><small>{config?.aiReady ? `Ready · ${config.aiModel}` : "Offline preview · no AI key"}</small></span><i className={config?.aiReady ? "connected" : ""}>{config?.aiReady ? "✓" : "–"}</i></div><p className="setup-caption">Credentials stay on the server. Never use PayPal Live credentials here.</p></section>
+            <section className="setup-card"><div className="setup-card-heading"><span className="section-kicker">DEMO STATUS</span><span className="setup-status">{config ? "STATUS" : "CHECKING"}</span></div><div className="connection-row"><span className="connection-icon paypal-icon">P</span><span><b>PayPal Sandbox</b><small>{config?.paypalReady ? "Sandbox test path ready; transaction not yet verified" : config?.paypalMisconfigured ? "Configuration incomplete" : "Local simulation only · not connected"}</small></span><i className={config?.paypalReady ? "connected" : ""}>{config?.paypalReady ? "✓" : "–"}</i></div><div className="connection-row"><span className="connection-icon ai-icon">◌</span><span><b>Review method</b><small>Local keyword demo · no AI API calls</small></span><i>–</i></div><p className="setup-caption">No AI provider is configured or called. Never use PayPal Live credentials here.</p></section>
           </aside>
         </div>
       </section>
 
-      <footer className="footer"><a className="brand footer-brand" href="#top"><Mark /><span>proof<span className="brand-light">pay</span></span></a><p>Designed for clearer agreements, not automatic decisions.</p><div><span>MIT LICENSE</span><span>PAYPAL SANDBOX</span></div></footer>
+      <footer className="footer"><a className="brand footer-brand" href="#top"><Mark /><span>proof<span className="brand-light">pay</span></span></a><p>Designed for clearer agreements, not automatic decisions.</p><div><span>MIT LICENSE</span><span>LOCAL DEMO</span></div></footer>
     </main>
   );
 }
