@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:ai": "node --test tests/ai-review.test.mjs"
   },
   "dependencies": {
     "next": "16.4.4",

@@ -6,6 +6,7 @@ type Config = {
   paypalReady: boolean;
   paypalMisconfigured: boolean;
   paypalClientId: string | null;
+  geminiDemoReady: boolean;
 };
 type Criterion = { id: string; text: string };
 type ReviewResult = {
@@ -13,12 +14,13 @@ type ReviewResult = {
   status: "met" | "partial" | "not_met" | "unclear";
   evidence: string;
   rationale: string;
-  matchRatio: number;
+  matchRatio?: number;
 };
 type Review = {
   summary: string;
   results: ReviewResult[];
-  mode: "demo_fixture";
+  mode: "demo_fixture" | "gemini_advisory";
+  model?: string;
   caution: string;
 };
 type PayPalButtonsOptions = {
@@ -89,6 +91,8 @@ export default function Home() {
   const [flowToken, setFlowToken] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [review, setReview] = useState<Review | null>(null);
+  const [reviewMode, setReviewMode] = useState<"local" | "gemini">("local");
+  const [aiConsent, setAiConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [decisionBusy, setDecisionBusy] = useState(false);
   const [error, setError] = useState("");
@@ -190,10 +194,17 @@ export default function Home() {
   }
 
   async function runReview() {
+    if (reviewMode === "gemini" && !aiConsent) {
+      setError("Please acknowledge the Gemini data notice before sending a review.");
+      return;
+    }
     setBusy(true);
     setError("");
+    if (reviewMode === "gemini") setAiConsent(false);
     try {
-      const result = await postJson<Review>("/api/demo/review", { criteria, notes: evidenceNotes });
+      const result = reviewMode === "gemini"
+        ? await postJson<Review>("/api/ai/review", { criteria, notes: evidenceNotes, consent: aiConsent })
+        : await postJson<Review>("/api/demo/review", { criteria, notes: evidenceNotes });
       setReview(result);
       setPhase("reviewed");
     } catch (issue) {
@@ -231,11 +242,13 @@ export default function Home() {
     activeFlowToken.current = "";
     setPaymentStatus("");
     setReview(null);
+    setReviewMode("local");
+    setAiConsent(false);
     setError("");
   }
 
   const hasInvalidAmount = !Number.isFinite(Number(amount)) || Number(amount) < 1 || Number(amount) > 10000;
-  const invalidCriteria = criteria.length === 0 || criteriaText.split("\n").filter((line) => line.trim()).length > 8;
+  const invalidCriteria = criteria.length === 0 || criteriaText.split("\n").filter((line) => line.trim()).length > 8 || criteria.some((item) => item.text.length > 240);
   const locked = phase !== "draft";
   const progress = phase === "draft" ? 1 : phase === "authorized" ? 2 : phase === "reviewed" ? 3 : 4;
 
@@ -302,7 +315,7 @@ export default function Home() {
 
             <section className={`panel evidence-panel ${phase === "draft" ? "muted-panel" : ""}`}>
               <div className="panel-heading">
-                <div className="panel-title"><span className="panel-number">02</span><div><h3>Share the evidence</h3><p>The local demo checks keyword overlap in your notes only. It never opens the link.</p></div></div>
+                <div className="panel-title"><span className="panel-number">02</span><div><h3>Share the evidence</h3><p>Choose a local keyword demo or an optional third-party Gemini review. Neither opens the link.</p></div></div>
                 {phase === "draft" && <span className="after-auth">AFTER AUTHORIZATION</span>}
               </div>
               <div className="evidence-fields">
@@ -310,23 +323,35 @@ export default function Home() {
                 <label className="field"><span>Evidence notes <small>What should the reviewer look for?</small></span><textarea rows={4} value={evidenceNotes} onChange={(event) => setEvidenceNotes(event.target.value)} disabled={phase === "draft" || phase === "settled"} /></label>
               </div>
               {phase === "draft" && <div className="locked-hint"><span className="lock-icon">⌑</span> Authorize the milestone first. Your agreed terms stay fixed during review.</div>}
-              {phase === "authorized" && <div className="review-cta-row"><div className="review-ready"><span className="ready-check">✓</span><span><b>Demo state recorded</b><small>{paymentMode === "simulation" ? "Local simulation · no PayPal funds involved" : "PayPal Sandbox test authorization"}</small></span></div><button className="button button-ink" onClick={runReview} disabled={busy || invalidCriteria}>{busy ? <><span className="spinner" /> Checking…</> : <>Run demo check <span>→</span></>}</button></div>}
+              {phase === "authorized" && <>
+                <fieldset className="review-mode-picker">
+                  <legend>Review method</legend>
+                  <label><input type="radio" name="review-mode" checked={reviewMode === "local"} onChange={() => setReviewMode("local")} /> Local keyword demo <small>Deterministic · no external call</small></label>
+                  <label><input type="radio" name="review-mode" checked={reviewMode === "gemini"} onChange={() => setReviewMode("gemini")} disabled={!config?.geminiDemoReady} /> Gemini AI demo <small>{config?.geminiDemoReady ? "Optional · operator-configured" : "Unavailable · free-tier configuration not confirmed"}</small></label>
+                </fieldset>
+                {reviewMode === "gemini" && <div className="ai-data-notice">
+                  <b>Third-party Gemini API Free-tier demo</b>
+                  <p>Only acceptance criteria and evidence notes will be sent to Google. Prompts and responses may be used to improve Google products. Use fake/public demo data only; do not enter personal information or confidential client work. Gemini may be inaccurate and does not verify evidence or decide payment.</p>
+                  <label><input type="checkbox" checked={aiConsent} onChange={(event) => setAiConsent(event.target.checked)} /> I understand and acknowledge this data use; I am using fake/public demo data only.</label>
+                </div>}
+                <div className="review-cta-row"><div className="review-ready"><span className="ready-check">✓</span><span><b>Demo state recorded</b><small>{paymentMode === "simulation" ? "Local simulation · no PayPal funds involved" : "PayPal Sandbox test authorization"}</small></span></div><button className="button button-ink" onClick={runReview} disabled={busy || invalidCriteria || (reviewMode === "gemini" && (!config?.geminiDemoReady || !aiConsent))}>{busy ? <><span className="spinner" /> Checking…</> : reviewMode === "gemini" ? <>Send to Gemini <span>→</span></> : <>Run local demo <span>→</span></>}</button></div>
+              </>}
             </section>
 
             {review && <section className="panel review-panel">
               <div className="panel-heading review-heading">
-                <div className="panel-title"><span className="panel-number">03</span><div><h3>Local demo check</h3><p>Deterministic keyword overlap only — not AI and not verification.</p></div></div>
-                <span className="ai-badge offline-ai"><span>◌</span> LOCAL DEMO · NOT AI</span>
+                <div className="panel-title"><span className="panel-number">03</span><div><h3>{review.mode === "gemini_advisory" ? "Gemini advisory review" : "Local demo check"}</h3><p>{review.mode === "gemini_advisory" ? "Third-party AI output · advisory only · not verification." : "Deterministic keyword overlap only — not AI and not verification."}</p></div></div>
+                <span className={`ai-badge ${review.mode === "gemini_advisory" ? "real-ai" : "offline-ai"}`}><span>{review.mode === "gemini_advisory" ? "✳" : "◌"}</span>{review.mode === "gemini_advisory" ? "GEMINI · ADVISORY" : "LOCAL DEMO · NOT AI"}</span>
               </div>
               <p className="review-summary">{review.summary}</p>
               <div className="criteria-results">
                 {criteria.map((criterion, index) => {
                   const result = review.results.find((item) => item.id === criterion.id);
                   if (!result) return null;
-                  return <article className="result-card" key={criterion.id}>
+                  return <article className={`result-card ${review.mode === "gemini_advisory" ? "result-card-advisory" : ""}`} key={criterion.id}>
                     <div className="result-number">{String(index + 1).padStart(2, "0")}</div>
                     <div className="result-content"><div className="result-topline"><h4>{criterion.text}</h4><span className={`status-tag status-${result.status}`}>{result.status.replace("_", " ")}</span></div><p className="result-evidence"><span>Evidence</span> {result.evidence}</p><p className="result-rationale">{result.rationale}</p></div>
-                    <div className="confidence"><strong>{Math.round(result.matchRatio * 100)}%</strong><span>keyword match</span></div>
+                    {review.mode === "demo_fixture" && typeof result.matchRatio === "number" && <div className="confidence"><strong>{Math.round(result.matchRatio * 100)}%</strong><span>keyword match</span></div>}
                   </article>;
                 })}
               </div>
@@ -364,7 +389,7 @@ export default function Home() {
 
             <section className="principles-card"><span className="section-kicker">BUILT ON THREE PROMISES</span><div className="principle"><span>01</span><div><b>Agree first</b><p>Set clear, testable criteria upfront.</p></div></div><div className="principle"><span>02</span><div><b>Show your work</b><p>Every recommendation points to evidence.</p></div></div><div className="principle"><span>03</span><div><b>Human in control</b><p>Only the client can confirm a payment action.</p></div></div></section>
 
-            <section className="setup-card"><div className="setup-card-heading"><span className="section-kicker">DEMO STATUS</span><span className="setup-status">{config ? "STATUS" : "CHECKING"}</span></div><div className="connection-row"><span className="connection-icon paypal-icon">P</span><span><b>PayPal Sandbox</b><small>{config?.paypalReady ? "Sandbox test path ready; transaction not yet verified" : config?.paypalMisconfigured ? "Configuration incomplete" : "Local simulation only · not connected"}</small></span><i className={config?.paypalReady ? "connected" : ""}>{config?.paypalReady ? "✓" : "–"}</i></div><div className="connection-row"><span className="connection-icon ai-icon">◌</span><span><b>Review method</b><small>Local keyword demo · no AI API calls</small></span><i>–</i></div><p className="setup-caption">No AI provider is configured or called. Never use PayPal Live credentials here.</p></section>
+            <section className="setup-card"><div className="setup-card-heading"><span className="section-kicker">DEMO STATUS</span><span className="setup-status">{config ? "STATUS" : "CHECKING"}</span></div><div className="connection-row"><span className="connection-icon paypal-icon">P</span><span><b>PayPal Sandbox</b><small>{config?.paypalReady ? "Sandbox test path ready; transaction not yet verified" : config?.paypalMisconfigured ? "Configuration incomplete" : "Local simulation only · not connected"}</small></span><i className={config?.paypalReady ? "connected" : ""}>{config?.paypalReady ? "✓" : "–"}</i></div><div className="connection-row"><span className="connection-icon ai-icon">◌</span><span><b>Review method</b><small>{config?.geminiDemoReady ? "Local demo + optional Gemini Free-tier path configured" : "Local keyword demo · optional Gemini path not configured"}</small></span><i className={config?.geminiDemoReady ? "connected" : ""}>{config?.geminiDemoReady ? "✓" : "–"}</i></div><p className="setup-caption">Gemini configuration is not independently verified here. Use only after the operator confirms free-tier/no-billing status. Never use PayPal Live credentials.</p></section>
           </aside>
         </div>
       </section>
