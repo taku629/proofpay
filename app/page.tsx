@@ -24,7 +24,7 @@ type Review = {
   caution: string;
 };
 type PayPalButtonsOptions = {
-  style?: Record<string, string>;
+  style?: Record<string, string | number>;
   createOrder: () => Promise<string>;
   onApprove: (data: { orderID: string }) => Promise<void>;
   onCancel?: () => void;
@@ -158,7 +158,7 @@ export default function Home() {
     container.replaceChildren();
     let active = true;
     window.paypal.Buttons({
-      style: { layout: "vertical", color: "gold", shape: "rect", label: "paypal", height: "44" },
+      style: { layout: "vertical", color: "gold", shape: "rect", label: "paypal", height: 44 },
       createOrder: async () => {
         setError("");
         const order = await postJson<{ id: string; flowToken: string }>("/api/paypal/order", { title, amount });
