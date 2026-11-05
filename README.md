@@ -8,7 +8,7 @@ Try the [hosted demo](https://proofpay-4o52.onrender.com). It runs on Render Fre
 
 The code also includes an optional Gemini 2.5 Flash advisory-review path. It is configured only in the operator's local environment and passed one smoke test using fictional data on a no-billing Free-tier project. Gemini is not enabled on the hosted demo.
 
-The PayPal integration is hard-wired to Sandbox. One fictional **$1 USD** Sandbox order was authorized and captured successfully; a void has not been tested. No further test transactions are authorized. Do not create or run another transaction as part of setup or routine testing. PayPal Live is unsupported.
+The PayPal integration is hard-wired to Sandbox. One previously approved fictional **$1 USD** Sandbox order was authorized and captured successfully; a void has not been transaction-tested. This was not a real-money payment. The hosted demo and routine development checks use simulation or mocks, not new PayPal transactions. PayPal Live is unsupported.
 
 ## Walkthrough
 
@@ -40,7 +40,7 @@ The server-only Gemini integration requires `GEMINI_API_KEY`, `GEMINI_PROJECT_ID
 
 ProofPay is a prototype, not escrow, evidence verification, or production-ready payment infrastructure. It has no database or durable persistence, user authentication, webhooks, payouts, or dispute handling. A PayPal authorization is not a guarantee of payment. The client must make any payment decision; simulation choices never move money.
 
-**Development disclosure:** Cue assisted with development, review, testing, and documentation. Any synthetic narration in a submission video will be labeled AI-generated and is not the owner's voice.
+**Development disclosure:** Cue assisted with development, review, testing, and documentation. ChatGPT provided an independent concept and scope review; that review did not verify the implementation or API behavior. The demo narration is AI-generated in English using the Charon voice, not the owner's voice, and is labeled accordingly. No background music is used.
 
 ## Development checks
 
